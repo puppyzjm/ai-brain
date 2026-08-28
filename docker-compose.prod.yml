@@ -1,0 +1,24 @@
+# ============================================
+# 生产环境 override（与 docker-compose.yml 叠加使用）
+# 启动：docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# 安全要点：
+# - postgres / redis / backend 仅绑定本机回环地址（127.0.0.1），不暴露公网
+# - frontend 绑定 127.0.0.1:8080，由宿主机 Nginx（80/443 + HTTPS）反代
+# ============================================
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  backend:
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  frontend:
+    ports:
+      - "127.0.0.1:8080:80"

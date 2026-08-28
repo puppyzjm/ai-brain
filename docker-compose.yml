@@ -1,0 +1,69 @@
+# AI Brain 开发环境编排
+# 启动：docker compose up -d
+# 说明：nginx 集成在 frontend 容器内（托管静态资源 + 反向代理 /api 到 backend）
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aibrain-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aibrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aibrain}
+      POSTGRES_DB: ${POSTGRES_DB:-aibrain}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aibrain} -d ${POSTGRES_DB:-aibrain}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: aibrain-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: aibrain-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aibrain}:${POSTGRES_PASSWORD:-aibrain}@postgres:5432/${POSTGRES_DB:-aibrain}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-change-me}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.siliconflow.cn/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      DEBUG: ${DEBUG:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
+
+  frontend:
+    build: ./frontend
+    container_name: aibrain-frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
