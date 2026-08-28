@@ -1,0 +1,84 @@
+# AI Brain CI 工作流（第一阶段：仅 CI，不部署）
+# 触发：push / PR 到 master 或 main
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    # 测试依赖的 PostgreSQL(pgvector) 与 Redis 服务
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: aibrain
+          POSTGRES_PASSWORD: aibrain
+          POSTGRES_DB: aibrain
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aibrain -d aibrain"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://aibrain:aibrain@localhost:5432/aibrain
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET_KEY: ci-test-only-secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run database migrations
+        working-directory: backend
+        run: alembic upgrade head
+
+      # CI 无真实 DeepSeek Key：跳过唯一需要真实 LLM 调用的用例
+      # （本地 .env 有 Key 时该用例正常执行）
+      - name: Run tests
+        working-directory: backend
+        run: pytest -q -k "not summarize_success_flow"
+
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
