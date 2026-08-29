@@ -5,6 +5,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: aibrain-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aibrain}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aibrain}
@@ -22,6 +23,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aibrain-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -35,6 +37,7 @@ services:
   backend:
     build: ./backend
     container_name: aibrain-backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aibrain}:${POSTGRES_PASSWORD:-aibrain}@postgres:5432/${POSTGRES_DB:-aibrain}
       REDIS_URL: redis://redis:6379/0
@@ -58,6 +61,7 @@ services:
   frontend:
     build: ./frontend
     container_name: aibrain-frontend
+    restart: unless-stopped
     depends_on:
       - backend
     ports:
