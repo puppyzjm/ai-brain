@@ -7,7 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 国内 PyPI 镜像 + 超时重试（服务器网络优化；依赖版本不变）
+RUN pip install --no-cache-dir \
+    -i https://mirrors.aliyun.com/pypi/simple/ \
+    --timeout 60 \
+    --retries 5 \
+    -r requirements.txt
 
 COPY . .
 
