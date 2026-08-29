@@ -2,7 +2,24 @@
 
 个人智能知识库与 AI 助理平台 —— 一个具备「私有 RAG + Agent Tool Calling + 流式对话」完整 AI 全栈能力的 Web 产品。
 
-> 当前处于 **Phase 1：项目骨架与基础设施** 阶段（尚未实现 RAG / Agent / 业务功能）。
+[![CI](https://github.com/puppyzjm/ai-brain/actions/workflows/ci.yml/badge.svg)](https://github.com/puppyzjm/ai-brain/actions/workflows/ci.yml)
+
+## 核心能力
+
+| 能力 | 说明 |
+|---|---|
+| 📚 知识库 + RAG 问答 | 上传 PDF/TXT/Markdown → 解析 → BGE-M3 向量化 → pgvector 检索 → 流式回答 + 引用来源（检索不足不编造） |
+| 💬 AI 流式对话 | 多轮对话、SSE 流式、Markdown/代码高亮、停止生成 |
+| 🤖 Agent 任务管理 | DeepSeek Function Calling：AI 自主创建/查询/修改/删除任务 + 检索知识库 |
+| 📝 文档总结 | 一键生成结构化摘要（核心主题/要点/建议） |
+| 📊 用量统计 | 调用次数、Token、成功率、近 7 天趋势 |
+
+## 文档
+
+- [架构设计](docs/architecture.md)（架构图 / 技术选型 / 分层铁律）
+- [API 文档](docs/api.md)（全部 REST + SSE 接口）
+- [数据库设计](docs/database.md)（9 张表 + ER 图 + pgvector）
+- [技术亮点与面试要点](docs/highlights.md)
 
 ## 技术栈
 
