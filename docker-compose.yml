@@ -47,6 +47,7 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.siliconflow.cn/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      OCR_MODEL: ${OCR_MODEL:-deepseek-ai/DeepSeek-OCR}
       DEBUG: ${DEBUG:-false}
     depends_on:
       postgres:
