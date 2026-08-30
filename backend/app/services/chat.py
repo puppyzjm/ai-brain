@@ -1,16 +1,19 @@
-"""对话核心逻辑：Agent 多轮工具调用 / RAG 问答 / 普通多轮对话 → SSE 流式。"""
+"""对话核心逻辑：Agent 多轮工具调用 / RAG 问答 / 多模态视觉问答 / 普通多轮对话 → SSE 流式。"""
 import asyncio
+import base64
 import json
 import time
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.base import AgentContext
 from app.agent.registry import registry
-from app.ai.factory import get_llm_provider
+from app.ai.factory import get_llm_provider, get_vision_provider
 from app.core.exceptions import AppException, NotFoundError
+from app.infrastructure.storage import EXT_TO_IMAGE_MIME, resolve_chat_image_path
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.rag.context import build_context
@@ -56,12 +59,14 @@ async def stream_chat(
     conversation_id: int | None,
     content: str,
     knowledge_base_ids: list[int] | None = None,
+    images: list[str] | None = None,
 ) -> AsyncIterator[dict]:
     """对话主流程，逐事件 yield SSE 事件字典。
 
     事件：{"type":"delta","content":...} / {"type":"sources","sources":[...]}
          / {"type":"tool","name":...,"status":...} / {"type":"done",...} / {"type":"error",...}
 
+    - 图片模式（images 非空，仅普通对话）：视觉模型直答（不带工具，不检索）。
     - RAG 模式（knowledge_base_ids 非空）：检索 → Context → DeepSeek（不带工具，Phase 5 行为）。
     - 普通模式：Agent 循环，自动携带 5 个工具定义，模型自主决定是否调用。
     """
@@ -79,20 +84,173 @@ async def stream_chat(
     conv, history = await _prepare_conversation(db, user_id, conversation_id)
 
     # 保存用户消息；新会话以首条消息作为标题
-    await msg_repo.create(conv.id, user_id, "user", content)
+    title_content = content.strip() or ("[图片]" if images else "新对话")
+    await msg_repo.create(conv.id, user_id, "user", content, images=images)
     if conv.title == "新对话":
-        conv.title = content[:30] or "新对话"
+        conv.title = title_content[:30] or "新对话"
     conv.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
     is_rag = bool(knowledge_base_ids)
 
-    if is_rag:
+    if images:
+        if is_rag:
+            yield {"type": "error", "message": "RAG 知识库问答暂不支持图片，请使用普通对话"}
+            yield {
+                "type": "done",
+                "conversation_id": conv.id,
+                "message_id": None,
+                "usage": None,
+            }
+            return
+        async for event in _vision_chat(db, provider, user_id, conv, content, images):
+            yield event
+    elif is_rag:
         async for event in _rag_chat(db, provider, user_id, conv, content, knowledge_base_ids):
             yield event
     else:
         async for event in _agent_chat(db, provider, user_id, conv, history, content):
             yield event
+
+
+# ==================== 多模态视觉分支（图片直答，不带工具/检索） ====================
+
+
+async def _vision_chat(
+    db: AsyncSession,
+    provider,
+    user_id: int,
+    conv: Conversation,
+    content: str,
+    images: list[str],
+) -> AsyncIterator[dict]:
+    """视觉模型直答：本轮图片 + 历史文本上下文，流式输出。
+
+    第一版取舍：历史消息中的图片不重发（省 token），仅携带文本上下文。
+    """
+    msg_repo = MessageRepository(db)
+    usage_repo = AiUsageLogRepository(db)
+
+    try:
+        vision_provider = get_vision_provider()
+    except AppException as exc:
+        yield {"type": "error", "message": exc.message}
+        yield {
+            "type": "done",
+            "conversation_id": conv.id,
+            "message_id": None,
+            "usage": None,
+            "error": exc.message,
+        }
+        return
+
+    # 读取图片 → base64（校验归属与存在性）
+    image_parts: list[dict] = []
+    try:
+        for name in images:
+            path = resolve_chat_image_path(user_id, name)
+            if path is None:
+                raise NotFoundError("图片不存在或已失效，请重新上传")
+            ext = Path(name).suffix.lower()
+            mime = EXT_TO_IMAGE_MIME.get(ext, "application/octet-stream")
+            b64 = base64.b64encode(path.read_bytes()).decode()
+            image_parts.append(
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+            )
+    except AppException as exc:
+        await usage_repo.create(
+            user_id, conv.id, "vision", vision_provider.model, 0, 0, 0, "failed", exc.message
+        )
+        await db.commit()
+        yield {"type": "error", "message": exc.message}
+        yield {
+            "type": "done",
+            "conversation_id": conv.id,
+            "message_id": None,
+            "usage": None,
+            "error": exc.message,
+        }
+        return
+
+    # 历史文本上下文（排除刚保存的本轮消息）+ 本轮 vision 消息
+    history = await msg_repo.list_by_conversation(user_id, conv.id)
+    messages: list[dict] = [
+        {"role": m.role, "content": m.content}
+        for m in history[:-1]
+        if m.role in ("user", "assistant") and m.content
+    ][-HISTORY_LIMIT:]
+
+    text = content.strip() or "请描述这张图片"
+    messages.append(
+        {"role": "user", "content": [{"type": "text", "text": text}, *image_parts]}
+    )
+
+    full_text = ""
+    usage = {"prompt_tokens": 0, "completion_tokens": 0}
+    error_message: str | None = None
+    start = time.monotonic()
+
+    try:
+        async for chunk in vision_provider.chat_stream(messages):
+            if chunk.content:
+                full_text += chunk.content
+                yield {"type": "delta", "content": chunk.content}
+            if chunk.usage:
+                usage = chunk.usage
+    except asyncio.CancelledError:
+        if full_text:
+            await msg_repo.create(
+                conv.id, user_id, "assistant", full_text, model=vision_provider.model
+            )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            await usage_repo.create(
+                user_id, conv.id, "vision", vision_provider.model,
+                usage["prompt_tokens"], usage["completion_tokens"], latency_ms, "success", None,
+            )
+            conv.updated_at = datetime.now(timezone.utc)
+            await db.commit()
+        raise
+    except AppException as exc:
+        error_message = exc.message
+        yield {"type": "error", "message": exc.message}
+    except Exception as exc:
+        error_message = str(exc)
+        yield {"type": "error", "message": "AI 服务调用失败，请稍后重试"}
+
+    latency_ms = int((time.monotonic() - start) * 1000)
+    status = "failed" if error_message else "success"
+
+    await usage_repo.create(
+        user_id, conv.id, "vision", vision_provider.model,
+        usage["prompt_tokens"], usage["completion_tokens"], latency_ms, status, error_message,
+    )
+
+    if status == "success":
+        assistant_msg = None
+        if full_text:
+            assistant_msg = await msg_repo.create(
+                conv.id, user_id, "assistant", full_text, model=vision_provider.model
+            )
+        conv.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        yield {
+            "type": "done",
+            "conversation_id": conv.id,
+            "message_id": assistant_msg.id if assistant_msg else None,
+            "usage": {
+                **usage,
+                "total_tokens": usage["prompt_tokens"] + usage["completion_tokens"],
+            },
+        }
+    else:
+        await db.commit()
+        yield {
+            "type": "done",
+            "conversation_id": conv.id,
+            "message_id": None,
+            "usage": None,
+            "error": error_message,
+        }
 
 
 # ==================== RAG 分支（Phase 5 行为保持不变）====================

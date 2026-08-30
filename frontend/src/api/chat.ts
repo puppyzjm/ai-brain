@@ -4,6 +4,8 @@ export interface ChatRequest {
   conversation_id?: number | null
   content: string
   knowledge_base_ids?: number[] | null
+  /** 多模态：聊天图片文件名列表（先经 /chat-images 上传） */
+  images?: string[] | null
 }
 
 export interface Source {

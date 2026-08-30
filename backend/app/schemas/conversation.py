@@ -27,4 +27,5 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     model: str | None
+    images: list[str] | None = None
     created_at: datetime

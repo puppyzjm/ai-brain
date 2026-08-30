@@ -57,11 +57,11 @@ jobs:
         working-directory: backend
         run: alembic upgrade head
 
-      # CI 无真实 DeepSeek Key：跳过唯一需要真实 LLM 调用的用例
-      # （本地 .env 有 Key 时该用例正常执行）
+      # CI 无真实 AI Key：跳过需要真实 LLM / 视觉模型调用的用例
+      # （本地 .env 有 Key 时这些用例正常执行）
       - name: Run tests
         working-directory: backend
-        run: pytest -q -k "not summarize_success_flow"
+        run: pytest -q -k "not summarize_success_flow and not vision_success_flow"
 
   frontend:
     name: Frontend Build

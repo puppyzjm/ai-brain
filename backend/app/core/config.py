@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # OCR（扫描版 PDF 文字提取，复用 SiliconFlow 同平台账号）
     ocr_model: str = "deepseek-ai/DeepSeek-OCR"
 
+    # 视觉（多模态图片问答，复用 SiliconFlow 同平台账号）
+    vision_model: str = "Qwen/Qwen3-VL-32B-Instruct"
+
     # 文件存储（用户上传文档）
     upload_dir: str = "uploads"
 

@@ -13,6 +13,10 @@ export interface Message {
   content: string
   model: string | null
   created_at: string
+  /** 多模态：用户消息携带的聊天图片文件名列表 */
+  images?: string[] | null
+  /** 前端本地字段：图片 blob URL（历史加载时填充，非后端返回） */
+  _imageUrls?: string[]
 }
 
 export async function listConversations(): Promise<Conversation[]> {

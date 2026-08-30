@@ -35,7 +35,12 @@ async def chat(
 
     async def event_stream():
         async for event in chat_service.stream_chat(
-            db, current_user.id, body.conversation_id, body.content, body.knowledge_base_ids
+            db,
+            current_user.id,
+            body.conversation_id,
+            body.content,
+            body.knowledge_base_ids,
+            body.images,
         ):
             yield _sse(event)
 

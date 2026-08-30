@@ -38,17 +38,17 @@ class DeepSeekProvider:
         stream = await self._client.chat.completions.create(**params)
         # 流式 tool_calls 累积：按 index 组装 id/name/arguments 分片
         tool_calls_acc: dict[int, dict[str, str]] = {}
+        # SiliconFlow 等平台会在每个 chunk 附带 usage（OpenAI 官方仅在末块携带），
+        # 缓存最终值，统一在流结束时输出
+        final_usage: dict[str, int] | None = None
 
         async for chunk in stream:
-            # 支持 include_usage 的流：最后一个 chunk 携带 usage
+            # 支持 include_usage 的流：缓存 usage，但不跳过本块（可能同时携带 content）
             if chunk.usage is not None:
-                yield ChatChunk(
-                    usage={
-                        "prompt_tokens": chunk.usage.prompt_tokens or 0,
-                        "completion_tokens": chunk.usage.completion_tokens or 0,
-                    }
-                )
-                continue
+                final_usage = {
+                    "prompt_tokens": chunk.usage.prompt_tokens or 0,
+                    "completion_tokens": chunk.usage.completion_tokens or 0,
+                }
             if not chunk.choices:
                 continue
             choice = chunk.choices[0]
@@ -71,7 +71,9 @@ class DeepSeekProvider:
             if delta and delta.content:
                 yield ChatChunk(content=delta.content, finish_reason=choice.finish_reason)
 
-        # 流结束时统一输出累积完成的 tool_calls
+        # 流结束时输出最终 usage 与累积完成的 tool_calls
+        if final_usage is not None:
+            yield ChatChunk(usage=final_usage)
         if tool_calls_acc:
             yield ChatChunk(
                 tool_calls=[

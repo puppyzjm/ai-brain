@@ -56,6 +56,20 @@
       <div ref="messageListRef" class="message-list">
         <div v-for="m in messages" :key="m.id" class="msg-row" :class="m.role">
           <div class="msg-bubble">
+            <div
+              v-if="m.role === 'user' && m._imageUrls?.length"
+              class="msg-images"
+            >
+              <el-image
+                v-for="(url, i) in m._imageUrls"
+                :key="i"
+                :src="url"
+                :preview-src-list="m._imageUrls"
+                preview-teleported
+                fit="cover"
+                class="msg-img"
+              />
+            </div>
             <div v-if="m.role === 'assistant'" class="md-body" v-html="renderMarkdown(m.content)" />
             <div v-else class="plain-body">{{ m.content }}</div>
           </div>
@@ -86,19 +100,48 @@
       </div>
 
       <div class="input-area">
+        <!-- 待发送图片预览 -->
+        <div v-if="pendingImages.length" class="pending-images">
+          <div v-for="(img, i) in pendingImages" :key="img.name" class="pending-img-wrap">
+            <el-image :src="img.url" fit="cover" class="pending-img" />
+            <span class="pending-remove" @click="removeImage(i)">×</span>
+          </div>
+        </div>
         <el-input
           v-model="input"
           type="textarea"
           :rows="3"
           resize="none"
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+          placeholder="输入消息，Enter 发送，Shift+Enter 换行；支持粘贴截图提问"
           @keydown.enter.exact.prevent="send"
+          @paste="onPaste"
         />
         <div class="input-actions">
+          <span class="input-tip">
+            <el-tooltip
+              :content="selectedKbIds.length ? 'RAG 模式暂不支持图片' : '支持粘贴截图（Ctrl+V）或选择图片，最多 3 张'"
+              placement="top"
+            >
+              <el-button
+                :disabled="selectedKbIds.length > 0 || pendingImages.length >= 3 || streaming"
+                @click="pickImage"
+              >
+                🖼 图片
+              </el-button>
+            </el-tooltip>
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              style="display: none"
+              @change="onPickFiles"
+            />
+          </span>
           <el-button
             v-if="!streaming"
             type="primary"
-            :disabled="!input.trim()"
+            :disabled="!input.trim() && !pendingImages.length"
             @click="send"
           >
             发送
@@ -115,6 +158,7 @@ import { nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { renderMarkdown } from '../utils/markdown'
 import { sendChatMessage, type Source, type ToolEvent } from '../api/chat'
+import { loadChatImageUrl, uploadChatImage } from '../api/chatImages'
 import {
   deleteConversation,
   getMessages,
@@ -124,6 +168,15 @@ import {
   type Message,
 } from '../api/conversation'
 import { listKnowledgeBases, type KnowledgeBase } from '../api/knowledgeBase'
+
+const MAX_IMAGES = 3
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 原始图 10MB 上限（压缩后通常远小于 5MB）
+const MAX_EDGE = 1280 // 压缩后最长边
+
+interface PendingImage {
+  name: string // 服务端存储文件名（上传成功后）
+  url: string // 本地 blob URL（预览用）
+}
 
 const conversations = ref<Conversation[]>([])
 const messages = ref<Message[]>([])
@@ -136,6 +189,8 @@ const kbs = ref<KnowledgeBase[]>([])
 const selectedKbIds = ref<number[]>([])
 const currentSources = ref<Source[]>([])
 const toolNotice = ref('')
+const pendingImages = ref<PendingImage[]>([])
+const fileInputRef = ref<HTMLInputElement | null>(null)
 let abortController: AbortController | null = null
 
 onMounted(() => {
@@ -163,9 +218,26 @@ async function selectConversation(c: Conversation) {
   activeId.value = c.id
   try {
     messages.value = await getMessages(c.id)
+    loadHistoryImages()
     scrollToBottom()
   } catch (e) {
     ElMessage.error((e as Error).message)
+  }
+}
+
+/** 历史消息图片鉴权加载（<img> 带不了 Authorization，用 fetch 换 blob URL） */
+async function loadHistoryImages() {
+  for (const m of messages.value) {
+    if (m.role !== 'user' || !m.images?.length) continue
+    const urls: string[] = []
+    for (const name of m.images) {
+      try {
+        urls.push(await loadChatImageUrl(name))
+      } catch {
+        urls.push('')
+      }
+    }
+    m._imageUrls = urls
   }
 }
 
@@ -174,11 +246,106 @@ function startNewChat() {
   messages.value = []
   streamText.value = ''
   currentSources.value = []
+  pendingImages.value = []
+}
+
+/** Ctrl+V 粘贴截图 */
+function onPaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items || streaming.value) return
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) {
+        e.preventDefault()
+        addImage(file)
+      }
+      break
+    }
+  }
+}
+
+function pickImage() {
+  fileInputRef.value?.click()
+}
+
+function onPickFiles(e: Event) {
+  const files = (e.target as HTMLInputElement).files
+  if (!files) return
+  for (const file of Array.from(files)) {
+    addImage(file)
+  }
+  ;(e.target as HTMLInputElement).value = ''
+}
+
+/** 压缩（最长边 ≤1280，JPEG 0.8）后上传，成功后加入待发列表 */
+async function addImage(file: File) {
+  if (pendingImages.value.length >= MAX_IMAGES) {
+    ElMessage.warning(`最多支持 ${MAX_IMAGES} 张图片`)
+    return
+  }
+  if (!file.type.startsWith('image/')) {
+    ElMessage.warning('仅支持图片文件')
+    return
+  }
+  if (file.size > MAX_IMAGE_SIZE) {
+    ElMessage.warning('图片超过 10MB，请压缩后再试')
+    return
+  }
+  try {
+    const compressed = await compressImage(file)
+    const name = await uploadChatImage(compressed)
+    pendingImages.value.push({ name, url: URL.createObjectURL(compressed) })
+  } catch (err) {
+    ElMessage.error((err as Error).message || '图片上传失败')
+  }
+}
+
+function removeImage(index: number) {
+  const [img] = pendingImages.value.splice(index, 1)
+  if (img) URL.revokeObjectURL(img.url)
+}
+
+function compressImage(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height))
+      const w = Math.max(1, Math.round(img.width * scale))
+      const h = Math.max(1, Math.round(img.height * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('浏览器不支持图片处理'))
+        return
+      }
+      ctx.drawImage(img, 0, 0, w, h)
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('图片压缩失败'))),
+        'image/jpeg',
+        0.8,
+      )
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('图片读取失败'))
+    }
+    img.src = url
+  })
 }
 
 async function send() {
   const content = input.value.trim()
-  if (!content || streaming.value) return
+  const imageNames = pendingImages.value.map((p) => p.name)
+  if ((!content && !imageNames.length) || streaming.value) return
+  if (imageNames.length && selectedKbIds.value.length) {
+    ElMessage.warning('RAG 知识库问答暂不支持图片，请切换到普通对话')
+    return
+  }
   input.value = ''
   messages.value.push({
     id: Date.now(),
@@ -186,7 +353,10 @@ async function send() {
     content,
     model: null,
     created_at: new Date().toISOString(),
+    images: imageNames,
+    _imageUrls: pendingImages.value.map((p) => p.url),
   })
+  pendingImages.value = []
   streamText.value = ''
   currentSources.value = []
   toolNotice.value = ''
@@ -199,6 +369,7 @@ async function send() {
         conversation_id: activeId.value,
         content,
         knowledge_base_ids: selectedKbIds.value.length ? selectedKbIds.value : null,
+        images: imageNames.length ? imageNames : null,
       },
       (delta) => {
         streamText.value += delta
@@ -442,8 +613,58 @@ async function handleConvAction(cmd: string, c: Conversation) {
   flex-direction: column;
   gap: 8px;
 }
+.pending-images {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pending-img-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+.pending-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+.pending-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  line-height: 16px;
+  text-align: center;
+  background: #f56c6c;
+  color: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 13px;
+}
+.input-tip {
+  display: inline-flex;
+  align-items: center;
+}
 .input-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+.msg-images {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.msg-img {
+  width: 120px;
+  height: 120px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.msg-row.user .msg-img {
+  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 </style>

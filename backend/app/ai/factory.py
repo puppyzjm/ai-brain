@@ -35,3 +35,19 @@ def get_embedding_provider() -> SiliconFlowEmbeddingProvider:
         base_url=settings.embedding_base_url,
         model=settings.embedding_model,
     )
+
+
+@lru_cache
+def get_vision_provider() -> DeepSeekProvider:
+    """视觉模型 Provider（复用 SiliconFlow 同平台 Key，OpenAI 兼容协议）。"""
+    if not settings.embedding_api_key:
+        raise AppException(
+            code=6003,
+            message="未配置 EMBEDDING_API_KEY（视觉模型复用 SiliconFlow Key），请在 .env 中填写后重启服务",
+            http_status=503,
+        )
+    return DeepSeekProvider(
+        api_key=settings.embedding_api_key,
+        base_url=settings.embedding_base_url,
+        model=settings.vision_model,
+    )

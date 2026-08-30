@@ -16,6 +16,7 @@ class MessageRepository:
         role: str,
         content: str,
         model: str | None = None,
+        images: list[str] | None = None,
     ) -> Message:
         msg = Message(
             conversation_id=conversation_id,
@@ -23,6 +24,7 @@ class MessageRepository:
             role=role,
             content=content,
             model=model,
+            images=images,
         )
         self.db.add(msg)
         await self.db.flush()
