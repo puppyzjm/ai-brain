@@ -41,3 +41,6 @@ pgdata/
 
 # local-only: interview notes (kept out of GitHub)
 docs/highlights.md
+
+# local-only: interview prep notes (kept out of GitHub)
+docs/interview-prep.md
