@@ -68,8 +68,11 @@ async def retrieve(
     for cid in ranked_ids:
         if cid in by_id:
             item = dict(by_id[cid])
-        else:
+        elif cid in details:
             item = details[cid]
+        else:
+            # 缓存残留的已删除 chunk（失效竞态）：安全跳过，绝不 500
+            continue
         item["bm25_score"] = round(bm25_by_id.get(cid, 0.0), 4)
         results.append(item)
     return results
