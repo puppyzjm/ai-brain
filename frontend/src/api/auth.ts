@@ -14,6 +14,7 @@ export interface LoginPayload {
 
 export interface TokenResponse {
   access_token: string
+  refresh_token: string
   token_type: string
 }
 
@@ -23,4 +24,11 @@ export async function register(payload: RegisterPayload): Promise<User> {
 
 export async function login(payload: LoginPayload): Promise<TokenResponse> {
   return (await client.post('/auth/login', payload)) as unknown as Promise<TokenResponse>
+}
+
+export async function logout(): Promise<void> {
+  const refresh = localStorage.getItem('refresh_token')
+  if (refresh) {
+    await client.post('/auth/logout', { refresh_token: refresh })
+  }
 }

@@ -9,6 +9,7 @@ from app.models.document_chunk import DocumentChunk
 from app.models.task import Task
 from app.models.ai_usage_log import AiUsageLog
 from app.models.agent_tool_call import AgentToolCall
+from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "Base",
@@ -21,4 +22,5 @@ __all__ = [
     "Task",
     "AiUsageLog",
     "AgentToolCall",
+    "RefreshToken",
 ]
