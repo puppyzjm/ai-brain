@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # AI：LLM（DeepSeek）
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-v4-pro"
 
     # AI：Embedding（SiliconFlow BGE-M3）
     embedding_api_key: str = ""
