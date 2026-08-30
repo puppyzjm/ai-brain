@@ -214,6 +214,24 @@ function formatSize(bytes: number): string {
 .doc-page {
   max-width: 900px;
   margin: 0 auto;
+  padding: 24px 20px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* 内容整组垂直居中 */
+.doc-page::before {
+  content: '';
+  flex-grow: 3.7;
+  flex-basis: 0;
+  flex-shrink: 0;
+}
+.doc-page::after {
+  content: '';
+  flex-grow: 6.3;
+  flex-basis: 0;
+  flex-shrink: 0;
 }
 .doc-header {
   display: flex;
@@ -228,7 +246,7 @@ function formatSize(bytes: number): string {
   padding: 12px 0;
 }
 .upload-tip {
-  color: #999;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 .summary-body {

@@ -169,6 +169,24 @@ function priorityText(p: TaskPriority): string {
 .task-page {
   max-width: 720px;
   margin: 0 auto;
+  padding: 24px 20px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* 内容整组垂直居中 */
+.task-page::before {
+  content: '';
+  flex-grow: 3.7;
+  flex-basis: 0;
+  flex-shrink: 0;
+}
+.task-page::after {
+  content: '';
+  flex-grow: 6.3;
+  flex-basis: 0;
+  flex-shrink: 0;
 }
 .task-header {
   display: flex;
@@ -198,7 +216,7 @@ function priorityText(p: TaskPriority): string {
 }
 .task-title.done {
   text-decoration: line-through;
-  color: #999;
+  color: var(--el-text-color-secondary);
 }
 .task-meta {
   display: flex;
@@ -206,7 +224,7 @@ function priorityText(p: TaskPriority): string {
   gap: 8px;
   margin-top: 4px;
   font-size: 12px;
-  color: #999;
+  color: var(--el-text-color-secondary);
 }
 .task-actions {
   display: flex;

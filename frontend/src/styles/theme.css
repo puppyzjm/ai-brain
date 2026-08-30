@@ -1,0 +1,149 @@
+/* AI Brain 全局主题：靛紫蓝品牌色 · 深色默认 · 圆润字体 · 大字号 */
+
+/* ============ 浅色模式 ============ */
+:root {
+  /* 品牌色：靛紫蓝（indigo） */
+  --el-color-primary: #5b5bd6;
+  --el-color-primary-light-3: #7b7cde;
+  --el-color-primary-light-5: #9c9de6;
+  --el-color-primary-light-7: #bdbeef;
+  --el-color-primary-light-8: #cecff3;
+  --el-color-primary-light-9: #dfe0f8;
+  --el-color-primary-dark-2: #4848b8;
+
+  /* 字号 A 档：正文 16.5px（Element Plus 默认 14px） */
+  --el-font-size-extra-large: 22px;
+  --el-font-size-large: 18.5px;
+  --el-font-size-medium: 17px;
+  --el-font-size-base: 16.5px;
+  --el-font-size-small: 15px;
+  --el-font-size-extra-small: 14px;
+
+  /* 组件尺寸随字号同步放大 */
+  --el-component-size-large: 46px;
+  --el-component-size: 40px;
+  --el-component-size-small: 30px;
+
+  /* 圆润字体栈：HarmonyOS Sans SC（中文）→ Nunito（英数）→ 系统兜底 */
+  --aibrain-font:
+    'HarmonyOS Sans SC', 'Nunito', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  --aibrain-radius: 10px;
+}
+
+/* ============ 深色模式（默认） ============ */
+html.dark {
+  /* 深色下品牌色提亮以保证对比度 */
+  --el-color-primary: #818cf8;
+  --el-color-primary-light-3: #9aa0fa;
+  --el-color-primary-light-5: #b3b8fc;
+  --el-color-primary-light-7: #ccd0fd;
+  --el-color-primary-light-8: #d8dbfe;
+  --el-color-primary-light-9: #e4e6fe;
+  --el-color-primary-dark-2: #6d72f0;
+
+  /* 深色背景：柔和蓝绿灰（替代 EP 默认纯黑） */
+  --el-bg-color-page: #131719;
+  --el-bg-color: #1a1f22;
+  --el-bg-color-overlay: #22282c;
+  --el-fill-color-blank: #1a1f22;
+  --el-border-color: #30383e;
+  --el-border-color-light: #2a3136;
+  --el-border-color-lighter: #262d31;
+  --el-text-color-primary: #e6eaec;
+  --el-text-color-regular: #c4cbcf;
+  --el-text-color-secondary: #8f9aa0;
+}
+
+html,
+body {
+  font-family: var(--aibrain-font);
+  font-size: var(--el-font-size-base);
+  -webkit-font-smoothing: antialiased;
+  /* 全局锁死视口滚动：页面内容在各自容器内滚动 */
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+}
+
+/* 代码保持等宽字体（圆体不适合代码） */
+code,
+pre,
+.md-body code {
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, Monaco, monospace;
+}
+
+/* 圆角统一 */
+.el-button,
+.el-input__wrapper,
+.el-textarea__inner,
+.el-card,
+.el-message-box {
+  border-radius: var(--aibrain-radius);
+}
+
+/* 深色滚动条 */
+html.dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3a4248;
+  border-radius: 5px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #4a545b;
+}
+html.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============ 深色模式代码高亮（覆盖浅色 github 主题） ============ */
+html.dark .hljs {
+  background: #1e2428;
+  color: #c9d1d9;
+}
+html.dark .hljs-keyword,
+html.dark .hljs-selector-tag,
+html.dark .hljs-literal {
+  color: #ff7b72;
+}
+html.dark .hljs-string,
+html.dark .hljs-regexp {
+  color: #a5d6ff;
+}
+html.dark .hljs-number,
+html.dark .hljs-symbol,
+html.dark .hljs-bullet {
+  color: #79c0ff;
+}
+html.dark .hljs-comment,
+html.dark .hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+html.dark .hljs-title,
+html.dark .hljs-section,
+html.dark .hljs-name {
+  color: #d2a8ff;
+}
+html.dark .hljs-attr,
+html.dark .hljs-attribute,
+html.dark .hljs-variable,
+html.dark .hljs-template-variable {
+  color: #79c0ff;
+}
+html.dark .hljs-built_in,
+html.dark .hljs-type,
+html.dark .hljs-class .hljs-title {
+  color: #ffa657;
+}
+html.dark .hljs-function .hljs-title {
+  color: #d2a8ff;
+}
+html.dark .hljs-meta {
+  color: #8b949e;
+}

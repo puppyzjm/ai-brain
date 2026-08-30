@@ -16,7 +16,6 @@
             管理文档
           </el-button>
           <el-button size="small" @click="openEdit(kb)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(kb)">删除</el-button>
         </div>
       </div>
     </el-card>
@@ -33,8 +32,15 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">保存</el-button>
+        <div class="dialog-footer">
+          <el-button v-if="editing" type="danger" plain @click="handleDeleteFromDialog">
+            删除
+          </el-button>
+          <div class="footer-right">
+            <el-button @click="dialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="handleSubmit">保存</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -100,7 +106,7 @@ async function handleSubmit() {
   }
 }
 
-async function handleDelete(kb: KnowledgeBase) {
+async function handleDelete(kb: KnowledgeBase): Promise<boolean> {
   try {
     await ElMessageBox.confirm(`确定删除知识库「${kb.name}」？其中的文档与向量将一并删除。`, '删除', {
       type: 'warning',
@@ -108,8 +114,17 @@ async function handleDelete(kb: KnowledgeBase) {
     await deleteKnowledgeBase(kb.id)
     ElMessage.success('已删除')
     load()
+    return true
   } catch {
-    /* 用户取消 */
+    return false
+  }
+}
+
+/** 编辑弹窗内的删除：删除成功后关闭弹窗 */
+async function handleDeleteFromDialog() {
+  if (!editing.value) return
+  if (await handleDelete(editing.value)) {
+    dialogVisible.value = false
   }
 }
 </script>
@@ -118,6 +133,24 @@ async function handleDelete(kb: KnowledgeBase) {
 .kb-page {
   max-width: 860px;
   margin: 0 auto;
+  padding: 24px 20px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* 内容整组垂直居中（不满屏时上下留白均等，超长正常滚动） */
+.kb-page::before {
+  content: '';
+  flex-grow: 3.7;
+  flex-basis: 0;
+  flex-shrink: 0;
+}
+.kb-page::after {
+  content: '';
+  flex-grow: 6.3;
+  flex-basis: 0;
+  flex-shrink: 0;
 }
 .kb-header {
   display: flex;
@@ -134,6 +167,19 @@ async function handleDelete(kb: KnowledgeBase) {
   align-items: center;
   justify-content: space-between;
 }
+.kb-actions {
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+.dialog-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.footer-right {
+  display: flex;
+  gap: 8px;
+}
 .kb-info {
   flex: 1;
   cursor: pointer;
@@ -144,7 +190,7 @@ async function handleDelete(kb: KnowledgeBase) {
 }
 .kb-desc {
   font-size: 13px;
-  color: #999;
+  color: var(--el-text-color-secondary);
   margin-top: 4px;
 }
 </style>

@@ -81,3 +81,38 @@ def resolve_chat_image_path(user_id: int, name: str) -> Path | None:
         return None
     path = get_chat_image_dir(user_id) / name
     return path if path.is_file() else None
+
+
+# ==================== 用户头像存储（校验与聊天图片一致） ====================
+
+
+def get_avatar_dir(user_id: int) -> Path:
+    """头像按用户隔离存储。"""
+    path = get_upload_dir() / "avatars" / str(user_id)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def save_avatar(user_id: int, content: bytes) -> str:
+    """保存头像（魔数校验 + 5MB 限制 + 用户目录隔离），返回存储文件名。"""
+    if not content:
+        raise AppException(code=4004, message="图片内容为空", http_status=400)
+    if len(content) > MAX_CHAT_IMAGE_SIZE:
+        raise AppException(code=4005, message="头像大小超过 5MB 限制", http_status=400)
+    ext = _detect_image_ext(content)
+    if ext is None:
+        raise AppException(
+            code=4004, message="仅支持 PNG / JPG / WebP 格式的图片", http_status=400
+        )
+
+    name = f"{uuid.uuid4().hex}{ext}"
+    (get_avatar_dir(user_id) / name).write_bytes(content)
+    return name
+
+
+def resolve_avatar_path(user_id: int, name: str) -> Path | None:
+    """按用户目录解析头像路径（防路径穿越）；不存在返回 None。"""
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return None
+    path = get_avatar_dir(user_id) / name
+    return path if path.is_file() else None

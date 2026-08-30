@@ -7,14 +7,15 @@ const md = new MarkdownIt({
   breaks: true,
   linkify: true,
   highlight(code: string, lang: string): string {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return `<pre class="hljs"><code>${hljs.highlight(code, { language: lang }).value}</code></pre>`
-      } catch {
-        /* fallthrough */
-      }
-    }
-    return `<pre class="hljs"><code>${hljs.highlightAuto(code).value}</code></pre>`
+    const highlighted =
+      lang && hljs.getLanguage(lang)
+        ? hljs.highlight(code, { language: lang }).value
+        : hljs.highlightAuto(code).value
+    // 代码块右上角复制按钮（点击事件由外层容器事件委托处理）
+    return (
+      `<div class="code-block"><button type="button" class="copy-btn" title="复制代码">复制</button>` +
+      `<pre class="hljs"><code>${highlighted}</code></pre></div>`
+    )
   },
 })
 

@@ -18,7 +18,13 @@
             trigger="click"
             @command="(cmd: string) => handleConvAction(cmd, c)"
           >
-            <span class="conv-menu" @click.stop>⋯</span>
+            <span class="conv-menu" @click.stop>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <circle cx="3" cy="8" r="1.7" />
+              <circle cx="8" cy="8" r="1.7" />
+              <circle cx="13" cy="8" r="1.7" />
+            </svg>
+          </span>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="rename">重命名</el-dropdown-item>
@@ -54,37 +60,47 @@
       </div>
 
       <div ref="messageListRef" class="message-list">
-        <div v-for="m in messages" :key="m.id" class="msg-row" :class="m.role">
-          <div class="msg-bubble">
-            <div
-              v-if="m.role === 'user' && m._imageUrls?.length"
-              class="msg-images"
-            >
-              <el-image
-                v-for="(url, i) in m._imageUrls"
-                :key="i"
-                :src="url"
-                :preview-src-list="m._imageUrls"
-                preview-teleported
-                fit="cover"
-                class="msg-img"
-              />
+        <div class="message-inner" @click="onMessageClick">
+          <div v-for="m in messages" :key="m.id" class="msg-row" :class="m.role">
+            <el-avatar :size="34" class="msg-avatar" :class="m.role">
+              <img v-if="m.role === 'user' && avatarUrl" :src="avatarUrl" alt="" />
+              <img v-else-if="m.role === 'assistant'" :src="aiAvatar" alt="AI" />
+              <span v-else>{{ user?.username?.[0] ?? '我' }}</span>
+            </el-avatar>
+            <div class="msg-content">
+              <div
+                v-if="m.role === 'user' && m._imageUrls?.length"
+                class="msg-images"
+              >
+                <el-image
+                  v-for="(url, i) in m._imageUrls"
+                  :key="i"
+                  :src="url"
+                  :preview-src-list="m._imageUrls"
+                  preview-teleported
+                  fit="cover"
+                  class="msg-img"
+                />
+              </div>
+              <div v-if="m.role === 'assistant'" class="md-body" v-html="renderMarkdown(m.content)" />
+              <div v-else class="plain-body">{{ m.content }}</div>
             </div>
-            <div v-if="m.role === 'assistant'" class="md-body" v-html="renderMarkdown(m.content)" />
-            <div v-else class="plain-body">{{ m.content }}</div>
           </div>
-        </div>
-        <div v-if="streaming" class="msg-row assistant">
-          <div class="msg-bubble">
-            <div v-if="toolNotice" class="tool-notice">{{ toolNotice }}</div>
-            <div v-else class="md-body" v-html="renderMarkdown(streamText)" />
+          <div v-if="streaming" class="msg-row assistant">
+            <el-avatar :size="34" class="msg-avatar assistant">
+              <img :src="aiAvatar" alt="AI" />
+            </el-avatar>
+            <div class="msg-content">
+              <div v-if="toolNotice" class="tool-notice">{{ toolNotice }}</div>
+              <div v-else class="md-body" v-html="renderMarkdown(streamText)" />
+            </div>
           </div>
+          <el-empty
+            v-if="!messages.length && !streaming"
+            description="开始你的第一段对话吧"
+            :image-size="80"
+          />
         </div>
-        <el-empty
-          v-if="!messages.length && !streaming"
-          description="开始你的第一段对话吧"
-          :image-size="80"
-        />
       </div>
 
       <!-- 引用来源 -->
@@ -107,27 +123,38 @@
             <span class="pending-remove" @click="removeImage(i)">×</span>
           </div>
         </div>
-        <el-input
-          v-model="input"
-          type="textarea"
-          :rows="3"
-          resize="none"
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行；支持粘贴截图提问"
-          @keydown.enter.exact.prevent="send"
-          @paste="onPaste"
-        />
-        <div class="input-actions">
-          <span class="input-tip">
+        <!-- 悬浮卡片式输入框 -->
+        <div class="input-card" :class="{ focused: inputFocused }">
+          <el-input
+            v-model="input"
+            type="textarea"
+            :rows="2"
+            resize="none"
+            class="chat-textarea"
+            placeholder="输入消息，Enter 发送，Shift+Enter 换行；支持粘贴截图"
+            @focus="inputFocused = true"
+            @blur="inputFocused = false"
+            @keydown.enter.exact.prevent="send"
+            @paste="onPaste"
+          />
+          <div class="input-card-bar">
             <el-tooltip
               :content="selectedKbIds.length ? 'RAG 模式暂不支持图片' : '支持粘贴截图（Ctrl+V）或选择图片，最多 3 张'"
               placement="top"
             >
-              <el-button
-                :disabled="selectedKbIds.length > 0 || pendingImages.length >= 3 || streaming"
-                @click="pickImage"
-              >
-                🖼 图片
-              </el-button>
+              <span>
+                <el-button
+                  class="icon-btn"
+                  :disabled="selectedKbIds.length > 0 || pendingImages.length >= 3 || streaming"
+                  @click="pickImage"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                    <circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none" />
+                    <path d="M5.5 17.5l4.5-4.5 3 3 3-3 3.5 3.5" />
+                  </svg>
+                </el-button>
+              </span>
             </el-tooltip>
             <input
               ref="fileInputRef"
@@ -137,16 +164,24 @@
               style="display: none"
               @change="onPickFiles"
             />
-          </span>
-          <el-button
-            v-if="!streaming"
-            type="primary"
-            :disabled="!input.trim() && !pendingImages.length"
-            @click="send"
-          >
-            发送
-          </el-button>
-          <el-button v-else type="danger" @click="stop">停止</el-button>
+            <el-button
+              v-if="!streaming"
+              type="primary"
+              circle
+              class="send-btn"
+              :disabled="!input.trim() && !pendingImages.length"
+              @click="send"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19V6M6 11.5l6-6 6 6" />
+              </svg>
+            </el-button>
+            <el-button v-else type="danger" circle class="send-btn" @click="stop">
+              <svg width="14" height="14" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+              </svg>
+            </el-button>
+          </div>
         </div>
       </div>
     </div>
@@ -154,11 +189,15 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '../stores/auth'
 import { renderMarkdown } from '../utils/markdown'
 import { sendChatMessage, type Source, type ToolEvent } from '../api/chat'
 import { loadChatImageUrl, uploadChatImage } from '../api/chatImages'
+import { loadAvatarUrl } from '../api/user'
+import aiAvatar from '../assets/ai-avatar.png'
 import {
   deleteConversation,
   getMessages,
@@ -178,6 +217,8 @@ interface PendingImage {
   url: string // 本地 blob URL（预览用）
 }
 
+const authStore = useAuthStore()
+const { user } = storeToRefs(authStore)
 const conversations = ref<Conversation[]>([])
 const messages = ref<Message[]>([])
 const activeId = ref<number | null>(null)
@@ -191,7 +232,26 @@ const currentSources = ref<Source[]>([])
 const toolNotice = ref('')
 const pendingImages = ref<PendingImage[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const inputFocused = ref(false)
+const avatarUrl = ref('')
 let abortController: AbortController | null = null
+
+// 加载用户头像（消息气泡头像用）
+watch(
+  () => user.value?.avatar,
+  async (name) => {
+    if (!name) {
+      avatarUrl.value = ''
+      return
+    }
+    try {
+      avatarUrl.value = await loadAvatarUrl(name)
+    } catch {
+      avatarUrl.value = ''
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   loadConversations()
@@ -434,6 +494,44 @@ function stop() {
   abortController?.abort()
 }
 
+/** 消息区点击委托：代码块复制按钮 */
+function onMessageClick(e: MouseEvent) {
+  const btn = (e.target as HTMLElement).closest('.copy-btn')
+  if (!btn) return
+  const code = btn.closest('.code-block')?.querySelector('code')?.textContent ?? ''
+  if (!code) return
+  copyToClipboard(code, btn as HTMLElement)
+}
+
+/** 复制文本：优先 Clipboard API（需 https/localhost），http 环境降级 execCommand */
+async function copyToClipboard(text: string, btn: HTMLElement) {
+  const markDone = () => {
+    btn.textContent = '✓ 已复制'
+    btn.classList.add('copied')
+    setTimeout(() => {
+      btn.textContent = '复制'
+      btn.classList.remove('copied')
+    }, 1500)
+  }
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    markDone()
+  } catch {
+    ElMessage.error('复制失败，请手动选择复制')
+  }
+}
+
 function scrollToBottom() {
   nextTick(() => {
     if (messageListRef.value) {
@@ -469,17 +567,20 @@ async function handleConvAction(cmd: string, c: Conversation) {
 </script>
 
 <style scoped>
+/* 视口锁定：继承 layout 的 main 高度，输入栏永远钉在底部 */
 .chat-page {
   display: flex;
-  height: calc(100vh - 60px);
+  height: 100%;
+  min-height: 0;
 }
 .sidebar {
   width: 260px;
-  border-right: 1px solid #eee;
+  border-right: 1px solid var(--el-border-color-light);
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex-shrink: 0;
 }
 .conv-list {
   flex: 1;
@@ -490,128 +591,259 @@ async function handleConvAction(cmd: string, c: Conversation) {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   margin-bottom: 4px;
 }
 .conv-item:hover {
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 .conv-item.active {
-  background: #ecf5ff;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary-dark-2);
 }
 .conv-title {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 15px;
 }
 .conv-menu {
   cursor: pointer;
   padding: 0 4px;
-  color: #999;
+  color: var(--el-text-color-secondary);
 }
 .chat-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 .rag-bar {
   padding: 10px 20px 0;
+  flex-shrink: 0;
 }
 .message-list {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  min-height: 0;
+}
+/* Cherry 式中央窄栏：消息列居中 */
+.message-inner {
+  max-width: 860px;
+  margin: 0 auto;
 }
 .msg-row {
   display: flex;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 22px;
+  align-items: center;
 }
 .msg-row.user {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
 }
-.msg-row.assistant {
-  justify-content: flex-start;
+.msg-avatar {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 15px;
 }
-.msg-bubble {
-  max-width: 76%;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 14px;
-  line-height: 1.6;
-}
-.msg-row.user .msg-bubble {
-  background: #409eff;
+.msg-avatar.user {
+  background: var(--el-color-primary);
   color: #fff;
 }
-.msg-row.assistant .msg-bubble {
-  background: #f5f7fa;
-  color: #333;
+.msg-avatar.assistant {
+  background: linear-gradient(135deg, var(--el-color-primary), var(--el-color-primary-light-3));
+  color: #fff;
+}
+.msg-avatar :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.msg-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.msg-row.user .msg-content {
+  align-items: flex-end;
+}
+.plain-body {
+  line-height: 1.7;
+  font-size: 15.5px;
+  color: var(--el-text-color-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.msg-row.user .plain-body {
+  text-align: right;
+}
+.md-body {
+  line-height: 1.75;
+  color: var(--el-text-color-primary);
+  word-break: break-word;
 }
 .md-body :deep(pre) {
-  background: #f6f8fa;
-  padding: 10px;
-  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+  padding: 12px;
+  border-radius: 8px;
   overflow-x: auto;
 }
+/* 代码块复制按钮（悬停显示，右上角） */
+.md-body :deep(.code-block) {
+  position: relative;
+}
+.md-body :deep(.code-block .copy-btn) {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  font-size: 12.5px;
+  line-height: 1;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color-overlay);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-family: var(--aibrain-font);
+}
+.md-body :deep(.code-block:hover .copy-btn),
+.md-body :deep(.code-block .copy-btn.copied) {
+  opacity: 1;
+}
+.md-body :deep(.code-block .copy-btn:hover) {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+.md-body :deep(.code-block .copy-btn.copied) {
+  color: #67c23a;
+  border-color: #67c23a;
+}
 .md-body :deep(code) {
-  font-family: Consolas, Monaco, monospace;
-  font-size: 13px;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, Monaco, monospace;
+  font-size: 14.5px;
 }
 .tool-notice {
-  color: #909399;
-  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  font-size: 14.5px;
   font-style: italic;
 }
 .sources-bar {
-  border-top: 1px dashed #e0e0e0;
+  border-top: 1px dashed var(--el-border-color);
   padding: 10px 20px;
-  max-height: 160px;
+  max-height: 180px;
   overflow-y: auto;
-  background: #fafafa;
+  background: var(--el-fill-color-lighter);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.sources-bar > * {
+  width: 100%;
+  max-width: 860px;
 }
 .sources-title {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
-  color: #666;
+  color: var(--el-text-color-primary);
   margin-bottom: 6px;
 }
 .source-item {
-  font-size: 12px;
-  color: #666;
+  font-size: 13.5px;
+  color: var(--el-text-color-secondary);
   margin-bottom: 6px;
 }
 .source-index {
-  color: #409eff;
+  color: var(--el-color-primary);
   font-weight: 600;
 }
 .source-file {
   font-weight: 600;
+  color: var(--el-text-color-regular);
   margin: 0 6px;
 }
 .source-page {
-  color: #999;
+  color: var(--el-text-color-secondary);
   margin-right: 6px;
 }
 .source-sim {
   color: #67c23a;
 }
 .source-preview {
-  color: #999;
+  color: var(--el-text-color-secondary);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .input-area {
-  border-top: 1px solid #eee;
-  padding: 12px 20px;
+  border-top: 1px solid var(--el-border-color-light);
+  padding: 12px 20px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  background: var(--el-bg-color);
+}
+/* Cherry 式中央窄栏：输入框与图片预览居中 */
+.input-area > * {
+  width: 100%;
+  max-width: 860px;
+}
+/* 悬浮卡片式输入框 */
+.input-card {
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  background: var(--el-fill-color-light);
+  padding: 6px 8px 6px 12px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.input-card.focused {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 3px var(--el-color-primary-light-8);
+}
+.chat-textarea :deep(.el-textarea__inner) {
+  border: none;
+  box-shadow: none !important;
+  background: transparent;
+  padding: 6px 2px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.input-card-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2px;
+}
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.icon-btn:hover:not(:disabled) {
+  color: var(--el-color-primary);
+  background: var(--el-fill-color);
+}
+.icon-btn:disabled {
+  opacity: 0.45;
+}
+.send-btn {
+  width: 38px;
+  height: 38px;
 }
 .pending-images {
   display: flex;
@@ -620,37 +852,28 @@ async function handleConvAction(cmd: string, c: Conversation) {
 }
 .pending-img-wrap {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
 }
 .pending-img {
-  width: 64px;
-  height: 64px;
-  border-radius: 6px;
-  border: 1px solid #e0e0e0;
+  width: 68px;
+  height: 68px;
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color);
 }
 .pending-remove {
   position: absolute;
   top: -8px;
   right: -8px;
-  width: 18px;
-  height: 18px;
-  line-height: 16px;
+  width: 19px;
+  height: 19px;
+  line-height: 17px;
   text-align: center;
   background: #f56c6c;
   color: #fff;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 13px;
-}
-.input-tip {
-  display: inline-flex;
-  align-items: center;
-}
-.input-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  font-size: 14px;
 }
 .msg-images {
   display: flex;
@@ -659,9 +882,9 @@ async function handleConvAction(cmd: string, c: Conversation) {
   margin-bottom: 8px;
 }
 .msg-img {
-  width: 120px;
-  height: 120px;
-  border-radius: 6px;
+  width: 130px;
+  height: 130px;
+  border-radius: 8px;
   cursor: pointer;
 }
 .msg-row.user .msg-img {

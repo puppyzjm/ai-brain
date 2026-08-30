@@ -24,8 +24,13 @@
     </div>
 
     <div class="features">
-      <el-card v-for="f in features" :key="f.title" class="feature-card" shadow="hover">
-        <div class="feature-icon">{{ f.icon }}</div>
+      <el-card
+        v-for="f in features"
+        :key="f.title"
+        class="feature-card"
+        shadow="hover"
+        @click="goFeature(f.path)"
+      >
         <h3>{{ f.title }}</h3>
         <p>{{ f.desc }}</p>
       </el-card>
@@ -35,61 +40,93 @@
 
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
 const { token } = storeToRefs(useAuthStore())
+const router = useRouter()
 
 const features = [
   {
-    icon: '📚',
-    title: 'RAG 知识库问答',
-    desc: '上传 PDF / TXT / Markdown，AI 基于你的资料回答并标注引用来源。',
-  },
-  {
-    icon: '💬',
     title: 'AI 流式对话',
-    desc: '多轮对话、SSE 流式输出、Markdown 渲染与代码高亮。',
+    desc: '多对话流式输出，Markdown渲染与代码高亮。',
+    path: '/chat',
   },
   {
-    icon: '🤖',
+    title: 'RAG 知识库问答',
+    desc: '上传文档，AI 基于你的资料回答问题，标注引用来源。',
+    path: '/knowledge-bases',
+  },
+  {
     title: 'Agent 任务管理',
-    desc: '一句话让 AI 创建、查询、修改你的任务，自动调用工具完成。',
+    desc: '一句话让 AI 帮你创建、查询和修改任务。',
+    path: '/tasks',
   },
   {
-    icon: '📊',
     title: '用量统计',
-    desc: '直观查看 AI 调用次数、Token 消耗与成功率趋势。',
+    desc: '直观查看 AI 调用次数、Token 消耗与成功率。',
+    path: '/stats',
   },
 ]
+
+/** 点击功能卡片跳转对应模块（未登录时由路由守卫引导登录） */
+function goFeature(path: string) {
+  router.push(path)
+}
 </script>
 
 <style scoped>
 .home {
   max-width: 960px;
   margin: 0 auto;
-  padding-top: 48px;
+  padding: 24px 20px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* 内容整组垂直居中（hero 与 features 之间保持固定间距） */
+.home::before {
+  content: '';
+  flex-grow: 3.7;
+  flex-basis: 0;
+  flex-shrink: 0;
+}
+.home::after {
+  content: '';
+  flex-grow: 6.3;
+  flex-basis: 0;
+  flex-shrink: 0;
+}
+.hero {
+  text-align: center;
+  padding: 24px 0;
+  margin: 0;
+}
+.features {
+  margin-top: 32px;
+  margin-bottom: 0;
 }
 .hero {
   text-align: center;
   padding: 32px 0;
-}
-.logo {
-  font-size: 42px;
+}.logo {
+  font-size: 46px;
   font-weight: 700;
   margin: 0;
-  background: linear-gradient(135deg, #409eff, #67c23a);
+  background: linear-gradient(135deg, var(--el-color-primary), var(--el-color-primary-light-5));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 .slogan {
-  font-size: 20px;
-  color: #333;
+  font-size: 22px;
+  color: var(--el-text-color-primary);
   margin-top: 12px;
 }
 .desc {
-  font-size: 14px;
-  color: #999;
+  font-size: 16px;
+  color: var(--el-text-color-secondary);
   margin-top: 8px;
 }
 .actions {
@@ -106,16 +143,34 @@ const features = [
 }
 .feature-card {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    transform 0.2s,
+    box-shadow 0.2s;
 }
-.feature-icon {
-  font-size: 32px;
+/* 减小卡片内边距，让描述每行容纳更多字（两行排下） */
+.feature-card :deep(.el-card__body) {
+  padding: 14px 10px;
+}
+.feature-card:hover {
+  border-color: var(--el-color-primary);
+  transform: translateY(-3px);
 }
 .feature-card h3 {
-  margin: 8px 0;
+  margin: 0 0 10px;
+  font-size: 17px;
 }
 .feature-card p {
-  font-size: 13px;
-  color: #666;
-  line-height: 1.6;
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.65;
+  /* 统一占两行高度：四个卡片描述区高度一致 */
+  min-height: 3.3em;
 }
 </style>

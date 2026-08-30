@@ -1,30 +1,24 @@
 <template>
   <div class="stats-page">
-    <h2>AI 使用统计</h2>
+    <h2 class="page-title">AI 使用统计</h2>
 
     <el-row :gutter="16" class="summary-row">
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover">
           <div class="metric-label">总请求次数</div>
           <div class="metric-value">{{ stats?.summary.total_requests ?? '-' }}</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover">
           <div class="metric-label">成功率</div>
           <div class="metric-value">{{ stats?.summary.success_rate ?? '-' }}%</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover">
-          <div class="metric-label">总 Token 消耗</div>
+          <div class="metric-label">Token 消耗</div>
           <div class="metric-value">{{ stats?.summary.total_tokens ?? '-' }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div class="metric-label">平均耗时</div>
-          <div class="metric-value">{{ stats?.summary.avg_latency_ms ?? '-' }}ms</div>
         </el-card>
       </el-col>
     </el-row>
@@ -124,18 +118,51 @@ function typeText(type: string): string {
 .stats-page {
   max-width: 900px;
   margin: 0 auto;
+  padding: 24px 20px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* 内容整组垂直居中 */
+.stats-page::before {
+  content: '';
+  flex-grow: 3.7;
+  flex-basis: 0;
+  flex-shrink: 0;
+}
+.stats-page::after {
+  content: '';
+  flex-grow: 6.3;
+  flex-basis: 0;
+  flex-shrink: 0;
 }
 .summary-row {
   margin-bottom: 16px;
 }
+.page-title {
+  text-align: center;
+  margin: 0 0 20px;
+}
+/* 四个指标卡：统一高度 + 框内文字水平垂直居中 */
+.summary-row :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 118px;
+  padding: 16px 8px;
+}
 .metric-label {
-  font-size: 13px;
-  color: #999;
+  font-size: 14.5px;
+  color: var(--el-text-color-secondary);
+  text-align: center;
 }
 .metric-value {
-  font-size: 26px;
+  font-size: 27px;
   font-weight: 600;
-  margin-top: 6px;
+  text-align: center;
 }
 .chart-card {
   margin-bottom: 16px;

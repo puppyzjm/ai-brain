@@ -70,11 +70,27 @@ async function handleRegister() {
 <style scoped>
 .auth-page {
   display: flex;
-  justify-content: center;
-  padding-top: 80px;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 20px;
+}
+/* 位置偏上：上留白 3.7 / 下留白 6.3 */
+.auth-page::before {
+  content: '';
+  flex-grow: 3.7;
+  flex-basis: 0;
+  flex-shrink: 0;
+}
+.auth-page::after {
+  content: '';
+  flex-grow: 6.3;
+  flex-basis: 0;
+  flex-shrink: 0;
 }
 .auth-card {
-  width: 400px;
+  width: 420px;
 }
 .tip {
   text-align: center;
