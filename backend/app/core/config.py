@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     embedding_base_url: str = "https://api.siliconflow.cn/v1"
     embedding_model: str = "BAAI/bge-m3"
 
+    # OCR（扫描版 PDF 文字提取，复用 SiliconFlow 同平台账号）
+    ocr_model: str = "deepseek-ai/DeepSeek-OCR"
+
     # 文件存储（用户上传文档）
     upload_dir: str = "uploads"
 

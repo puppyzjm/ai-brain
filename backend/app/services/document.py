@@ -10,8 +10,11 @@ import time
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.factory import get_embedding_provider, get_llm_provider
+from app.core.config import settings
 from app.core.exceptions import AppException, NotFoundError
-from app.document.pipeline import extract_chunks
+from app.document import loader
+from app.document.ocr import PdfOcrService
+from app.document.pipeline import chunks_from_sections, extract_chunks
 from app.infrastructure.database import async_session_factory
 from app.infrastructure.storage import save_upload
 from app.infrastructure.vector_store import PgVectorStore
@@ -114,8 +117,28 @@ async def _process_document(user_id: int, document_id: int) -> None:
 
         try:
             chunks = extract_chunks(doc.stored_path, doc.file_type)
+
+            # OCR fallback：扫描版 PDF（无文字层的页 → 视觉模型提取文字）
+            if doc.file_type == "pdf":
+                empty_pages = loader.find_empty_pages(doc.stored_path)
+                if empty_pages:
+                    try:
+                        ocr_service = PdfOcrService(
+                            api_key=settings.embedding_api_key,
+                            base_url=settings.embedding_base_url,
+                            model=settings.ocr_model,
+                        )
+                        ocr_texts = await ocr_service.ocr_pages(doc.stored_path, empty_pages)
+                    except Exception as exc:
+                        raise ValueError(f"扫描页 OCR 提取失败：{str(exc)[:200]}") from exc
+                    ocr_sections = [
+                        {"text": text, "metadata": {"page": page}}
+                        for page, text in ocr_texts.items()
+                    ]
+                    chunks.extend(chunks_from_sections(ocr_sections))
+
             if not chunks:
-                raise ValueError("文档内容为空或无法解析（扫描版 PDF 暂不支持）")
+                raise ValueError("文档内容为空或无法解析")
 
             provider = get_embedding_provider()
             texts = [c[0] for c in chunks]

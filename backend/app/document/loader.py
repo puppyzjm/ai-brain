@@ -26,6 +26,17 @@ def _load_pdf(path: str) -> list[dict]:
     return sections
 
 
+def find_empty_pages(path: str) -> list[int]:
+    """返回 PDF 中无文字层的页号列表（从 0 起）——这些页需要 OCR。"""
+    empty: list[int] = []
+    with fitz.open(path) as doc:
+        for page_index in range(len(doc)):
+            text = doc[page_index].get_text("text")
+            if not text.strip():
+                empty.append(page_index)
+    return empty
+
+
 def _load_text_file(path: str) -> list[dict]:
     text = _read_with_encoding_detection(path)
     return [{"text": text, "metadata": {}}]
