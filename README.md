@@ -9,8 +9,12 @@
 | 能力 | 说明 |
 |---|---|
 | 📚 知识库 + RAG 问答 | 上传 PDF/TXT/Markdown → 解析 → BGE-M3 向量化 → pgvector 检索 → 流式回答 + 引用来源（检索不足不编造） |
+| 🔀 混合检索 | 向量语义检索 + BM25 关键词检索（jieba 分词）→ RRF 融合，中文精确命中更好 |
+| 📄 扫描版 PDF OCR | 自动识别无文字层页面 → DeepSeek-OCR 提取文字并入索引（文字页零成本直通） |
+| 🖼 多模态图片问答 | 聊天框粘贴截图 → Qwen3-VL 视觉模型看图回答（≤3 张、压缩传输、安全校验） |
 | 💬 AI 流式对话 | 多轮对话、SSE 流式、Markdown/代码高亮、停止生成 |
 | 🤖 Agent 任务管理 | DeepSeek Function Calling：AI 自主创建/查询/修改/删除任务 + 检索知识库 |
+| 🔐 安全认证 | JWT 短期访问令牌 + Refresh Token 轮换防重放、注销撤销；图片/文档魔数校验、用户数据全隔离 |
 | 📝 文档总结 | 一键生成结构化摘要（核心主题/要点/建议） |
 | 📊 用量统计 | 调用次数、Token、成功率、近 7 天趋势 |
 
@@ -18,8 +22,7 @@
 
 - [架构设计](docs/architecture.md)（架构图 / 技术选型 / 分层铁律）
 - [API 文档](docs/api.md)（全部 REST + SSE 接口）
-- [数据库设计](docs/database.md)（9 张表 + ER 图 + pgvector）
-- [技术亮点与面试要点](docs/highlights.md)
+- [数据库设计](docs/database.md)（10 张表 + ER 图 + pgvector）
 
 ## 技术栈
 
@@ -29,7 +32,8 @@
 | 后端 | Python 3.12 + FastAPI + SQLAlchemy 2.x + Alembic + Pydantic v2 |
 | 数据库 | PostgreSQL 16 + pgvector |
 | 缓存/限流 | Redis 7 |
-| AI | DeepSeek（LLM）、SiliconFlow BGE-M3（Embedding） |
+| AI | DeepSeek（LLM）、SiliconFlow BGE-M3（Embedding）、DeepSeek-OCR（扫描件文字提取）、Qwen3-VL（视觉问答） |
+| 检索 | pgvector 向量 + BM25（jieba + rank-bm25）+ RRF 融合 |
 | 部署 | Docker Compose + Nginx |
 
 ## 目录结构
@@ -73,10 +77,10 @@ docker compose up -d --build
 
 # 3. 验证
 curl http://localhost:8000/health
-# 前端：http://localhost:80
+# 前端：http://localhost:8080
 ```
 
-后端容器启动时会自动执行 `alembic upgrade head` 创建全部 9 张表并启用 pgvector。
+后端容器启动时会自动执行 `alembic upgrade head` 创建全部 10 张表并启用 pgvector。
 
 ## 本地开发（手动，不使用 Docker）
 
@@ -131,6 +135,9 @@ npm run dev   # http://localhost:5173
 | 0006 | create_tasks |
 | 0007 | create_ai_usage_logs |
 | 0008 | create_agent_tool_calls |
+| 0009 | create_refresh_tokens |
+| 0010 | messages 增加 images（多模态） |
+| 0011 | ai_usage_logs 类型扩展 vision |
 
 ```bash
 cd backend
@@ -158,8 +165,10 @@ alembic current            # 查看当前版本
 
 ```bash
 cd backend
-pytest
+pytest   # 45 个用例：鉴权/越权/CRUD/RAG/缓存失效/图片上传校验 + 真实 AI 调用集成用例
 ```
+
+> CI（GitHub Actions）无真实 API Key，会跳过需要真实 LLM / 视觉模型调用的用例（本地 .env 配置 Key 后全量执行）。
 
 ## 生产部署（公网上线完整指南）
 
@@ -189,7 +198,7 @@ scp -r "D:/ai brain" user@your-server:/opt/aibrain
 cd /opt/aibrain
 ```
 
-### 4. 配置 .env（必填 4 项）
+### 4. 配置 .env（必填项）
 
 ```bash
 cp .env.example .env
@@ -197,16 +206,18 @@ vi .env
 ```
 
 ```ini
-JWT_SECRET_KEY=openssl_rand_hex_32_的输出          # 生成：openssl rand -hex 32
+JWT_SECRET_KEY=openssl_rand_hex_32_的输出          # 生成：openssl rand -hex 32（≥32 字节）
 POSTGRES_PASSWORD=改一个强密码                      # 不要用默认 aibrain
-DEEPSEEK_API_KEY=sk-...                            # DeepSeek 平台申请
-EMBEDDING_API_KEY=sk-...                           # SiliconFlow 平台申请（BGE-M3）
+DEEPSEEK_API_KEY=sk-...                            # DeepSeek 平台申请（对话 LLM）
+EMBEDDING_API_KEY=sk-...                           # SiliconFlow 平台申请（BGE-M3 / OCR / 视觉模型共用）
 ```
 
-### 5. 启动（生产模式：端口最小化暴露）
+可选：`OCR_MODEL`、`VISION_MODEL` 默认即 DeepSeek-OCR 与 Qwen3-VL，一般无需修改。
+
+### 5. 启动（单文件编排，端口全部绑定 127.0.0.1）
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose up -d --build
 docker compose ps          # 4 容器 healthy
 curl http://127.0.0.1:8080 # 前端应响应
 curl http://127.0.0.1:8000/health   # {"status":"ok",...}
@@ -280,9 +291,9 @@ docker logs aibrain-frontend       # Nginx 访问/错误日志
 ### 11. 更新项目的方法
 
 ```bash
-cd /opt/aibrain
+cd /opt/ai-brain
 git pull                          # 拉取新代码
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose up -d --build
 # 数据库结构变更会自动通过 alembic upgrade head 执行
 ```
 
@@ -294,9 +305,11 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 | /health degraded | 检查 postgres/redis 容器与网络：`docker compose ps` |
 | 上传 413 | 宿主机与容器内 Nginx 的 `client_max_body_size` 都需 ≥20m |
 | 聊天报 AI 服务失败 | 检查 `.env` 的 `DEEPSEEK_API_KEY` 是否有效、余额是否充足 |
-| 上传解析失败(failed) | `docker compose logs backend` 看 `error_message`；扫描版 PDF 不支持 |
+| 图片上传被拒(4004) | 仅支持 PNG/JPG/WebP 且 ≤5MB；服务端按文件头魔数校验，伪装扩展名会被拒绝 |
+| 图片问答报错 | 检查 `EMBEDDING_API_KEY`（视觉模型复用 SiliconFlow Key）与 `VISION_MODEL` 配置 |
+| 上传解析失败(failed) | `docker compose logs backend` 看 `error_message`；扫描版 PDF 会自动走 OCR，OCR 失败时在此显示原因 |
 | 页面 404（刷新子路由） | 容器 Nginx 已配置 `try_files /index.html`；宿主机 Nginx 也需按第 7 步配置 |
 
 ## 当前阶段说明
 
-第一版（v1.0）功能全部完成：用户系统、AI Chat（SSE/多轮）、知识库（上传/解析/Embedding/pgvector）、RAG 问答（引用来源）、文档总结、Agent Tool Calling（任务工具）、用量统计。
+v1.x 功能全部完成并上线：用户系统（JWT + Refresh Token 轮换防重放）、AI Chat（SSE/多轮）、知识库（上传/解析/Embedding/pgvector）、RAG 问答（混合检索 BM25+向量 RRF、引用来源、诚实原则）、扫描版 PDF OCR、多模态图片问答（粘贴截图 → 视觉模型）、文档总结、Agent Tool Calling（任务工具）、用量统计。测试 45 个（含真实 AI 调用的集成用例，CI 自动排除无 Key 用例）。

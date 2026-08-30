@@ -38,3 +38,6 @@ htmlcov/
 backend/uploads/
 pgdata/
 *.log
+
+# local-only: interview notes (kept out of GitHub)
+docs/highlights.md

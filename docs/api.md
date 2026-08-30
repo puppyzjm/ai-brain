@@ -16,9 +16,13 @@
 | 方法 | 路径 | 参数 | 说明 |
 |---|---|---|---|
 | POST | `/auth/register` | `{username(3-50), email(可选), password(6-128)}` | 注册，返回用户资料 |
-| POST | `/auth/login` | `{account(用户名或邮箱), password}` | 登录，返回 `{access_token, token_type:"bearer"}`（JWT，7 天） |
+| POST | `/auth/login` | `{account(用户名或邮箱), password}` | 登录，返回 `{access_token, refresh_token, token_type}`（access 30 分钟 + refresh 30 天） |
+| POST | `/auth/refresh` | `{refresh_token}` | 刷新令牌：旧 refresh 立即作废并签发新对（**轮换防重放**），返回新 `{access_token, refresh_token}` |
+| POST | `/auth/logout` | `{refresh_token}` | 注销：撤销 refresh token（清空浏览器登录态） |
 
-错误码：4001 用户名已存在(409) / 4002 邮箱已被注册(409) / 4003 用户名或密码错误(401)
+错误码：4001 用户名已存在(409) / 4002 邮箱已被注册(409) / 4003 用户名或密码错误(401) / 4008 refresh token 无效或已过期(401)
+
+> 安全说明：refresh token 为随机串，服务端仅存 SHA-256 哈希；轮换机制使泄露的旧 token 被检测并撤销整条链。
 
 ## 2. 用户 users
 
@@ -32,7 +36,7 @@
 
 | 方法 | 路径 | 请求体 | 说明 |
 |---|---|---|---|
-| POST | `/chat` | `{conversation_id?(不传新建), content, knowledge_base_ids?(可选)}` | 普通对话 / Agent / RAG 三种模式统一入口，SSE 流式响应 |
+| POST | `/chat` | `{conversation_id?(不传新建), content, knowledge_base_ids?(可选), images?(可选)}` | 普通对话 / Agent / RAG / 视觉问答统一入口，SSE 流式响应 |
 
 **SSE 事件类型**：
 
@@ -44,9 +48,20 @@
 | `done` | `conversation_id, message_id, usage, error?` | 结束（含 token 用量） |
 | `error` | `message` | 错误信息 |
 
-**三种模式**：
-- 不传 `knowledge_base_ids`：Agent 模式（自动携带 5 个工具，模型自主调用）+ 多轮历史；
-- 传 `knowledge_base_ids`：RAG 模式（检索→Context→回答+来源；检索不足返回固定话术，不调 LLM）。
+**四种模式**：
+- 不传 `knowledge_base_ids` 与 `images`：Agent 模式（自动携带 5 个工具，模型自主调用）+ 多轮历史；
+- 传 `knowledge_base_ids`：RAG 模式（混合检索 → Context → 回答+来源；检索不足返回固定话术，不调 LLM）；
+- 传 `images`（普通对话）：视觉问答模式（视觉模型看图直答，本轮图片 + 历史文本上下文）；`content` 可为空（纯图提问）；
+- `images` 与 `knowledge_base_ids` 同时传：返回错误（多模态 RAG 未支持，第一版划界）。
+
+## 3.1 聊天图片 chat-images
+
+| 方法 | 路径 | 参数 | 说明 |
+|---|---|---|---|
+| POST | `/chat-images` | multipart `file`（png/jpg/webp，≤5MB） | 上传聊天附图，返回 `{name}`（随后放入 `/chat` 的 `images`） |
+| GET | `/chat-images/{name}` | — | 按文件名读取图片（JWT 鉴权 + 用户目录隔离，防路径穿越） |
+
+约束：`images` 最多 3 张；服务端按**文件头魔数**校验真实类型（伪装扩展名被拒）；图片按用户目录隔离存储（UUID 文件名），他人无法读取。
 
 ## 4. 会话 conversations
 
@@ -56,7 +71,7 @@
 | POST | `/conversations` | `{title?}` | 新建会话 |
 | PATCH | `/conversations/{id}` | `{title}` | 重命名 |
 | DELETE | `/conversations/{id}` | — | 删除（软删） |
-| GET | `/conversations/{id}/messages` | — | 历史消息（`[{id, role, content, model, created_at}]`） |
+| GET | `/conversations/{id}/messages` | — | 历史消息（`[{id, role, content, model, images?, created_at}]`，`images` 为多模态消息的图片文件名列表） |
 
 ## 5. 知识库 knowledge-bases
 
@@ -71,7 +86,7 @@
 
 | 方法 | 路径 | 参数 | 说明 |
 |---|---|---|---|
-| POST | `/knowledge-bases/{kb_id}/documents` | multipart `file`（pdf/txt/md，≤20MB） | 上传；异步解析（uploaded→parsing→ready/failed） |
+| POST | `/knowledge-bases/{kb_id}/documents` | multipart `file`（pdf/txt/md，≤20MB） | 上传；异步解析（uploaded→parsing→ready/failed）；PDF 无文字层的页自动走 DeepSeek-OCR 提取 |
 | GET | `/knowledge-bases/{kb_id}/documents` | — | 文档列表（含 `status/chunk_count/error_message`） |
 | DELETE | `/documents/{id}` | — | 删除（软删 + 物理删向量） |
 | POST | `/documents/{id}/reprocess` | — | 重新解析（失败重试/重启恢复） |
@@ -94,7 +109,7 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/stats/usage` | 个人用量：`summary`（总请求/成功率/token/平均耗时）+ `by_type`（chat/rag/agent/summary）+ `daily`（近 7 天） |
+| GET | `/stats/usage` | 个人用量：`summary`（总请求/成功率/token/平均耗时）+ `by_type`（chat/rag/agent/summary/vision）+ `daily`（近 7 天） |
 
 ## 9. Agent 工具（由模型通过 Function Calling 调用，非 HTTP 接口）
 
